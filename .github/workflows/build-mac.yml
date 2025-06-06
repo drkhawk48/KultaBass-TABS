@@ -1,0 +1,75 @@
+name: Build for macOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}  # Permite ejecutar manualmente desde GitHub
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v3
+
+      - name: 🐍 Instalar Python
+        run: |
+          brew install python@3.10
+          echo "/opt/homebrew/opt/python@3.10/bin:$PATH" >> $GITHUB_PATH
+          python3 --version
+
+      - name: 🔧 Instalar dependencias
+        run: |
+          pip install pyinstaller pillow
+
+      - name: 📁 Compilar app con PyInstaller
+        run: |
+          cd KultaBass-TABS
+          mkdir -p dist
+
+          pyinstaller --onefile --windowed \
+              --icon=assets/icon.icns \
+              --add-data "tablaturas:tablaturas" \
+              --add-data "assets:assets" \
+              main.py
+
+      - name: 📦 Empaquetar como .app
+        run: |
+          mkdir -p dist/KultaBass-TABS.app/Contents/{MacOS,Resources}
+
+          cp dist/main dist/KultaBass-TABS.app/Contents/MacOS/KultaBass-TABS
+          cp -R assets/* dist/KultaBass-TABS.app/Contents/Resources/
+          cp -R tablaturas dist/KultaBass-TABS.app/Contents/Resources/
+
+      - name: 📄 Generar Info.plist
+        run: |
+          cat > dist/KultaBass-TABS.app/Contents/Info.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>KultaBass-TABS</string>
+    <key>CFBundleDisplayName</key><string>KultaBass-TABS</string>
+    <key>CFBundleIdentifier</key><string>com.tuempresa.kultabass-tabs</string>
+    <key>CFBundleVersion</key><string>1.0</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleExecutable</key><string>KultaBass-TABS</string>
+    <key>CFBundleIconFile</key><string>icon.icns</string>
+    <key>LSMinimumSystemVersion</key><string>10.12</string>
+</dict>
+</plist>
+EOF
+
+      - name: 💾 Generar DMG
+        run: |
+          hdiutil verify dist/KultaBass-TABS.dmg || true
+          hdiutil create -volname "KultaBass-TABS" \
+              -srcfolder dist/KultaBass-TABS.app \
+              -ov -format UDZO dist/KultaBass-TABS.dmg
+
+      - name: 🚀 Subir artefacto final
+        uses: actions/upload-artifact@v3
+        with:
+          name: KultaBass-TABS.dmg
+          path: dist/KultaBass-TABS.dmg
